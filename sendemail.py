@@ -13,36 +13,12 @@ from email.mime.audio import MIMEAudio
 from email.mime.base import MIMEBase
 from email import encoders
 
-#SCOPES = 'https://www.googleapis.com/auth/gmail.send'
-#CLIENT_SECRET_FILE = 'client_secret.json'
-#APPLICATION_NAME = 'Gmail API Python Send Email'
-
-#def get_credentials():
-#    home_dir = os.path.expanduser('~')
-#    credential_dir = os.path.join(home_dir, '.credentials')
-#    if not os.path.exists(credential_dir):
-#        os.makedirs(credential_dir)
-#    credential_path = os.path.join(credential_dir,
-#                                   'gmail-python-email-send.json')
-#    store = oauth2client.file.Storage(credential_path)
-#    credentials = store.get()
-#    if not credentials or credentials.invalid:
-#        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-#        flow.user_agent = APPLICATION_NAME
-#        credentials = tools.run_flow(flow, store)
-#        print('Storing credentials to ' + credential_path)
-#    return credentials
-
 #def SendMessage(sender, to, subject, msgHtml, msgPlain, creds, attachmentFile=None):
 def SendMessage(to, subject, msgHtml, msgPlain, creds, attachmentFile=None):
-#    credentials = get_credentials()
-#    http = credentials.authorize(httplib2.Http())
     service = build('gmail', 'v1', credentials=creds)
     if attachmentFile:
-#        message1 = createMessageWithAttachment(sender, to, subject, msgHtml, msgPlain, attachmentFile)
         message1 = createMessageWithAttachment(to, subject, msgHtml, msgPlain, attachmentFile)
     else: 
-#        message1 = CreateMessageHtml(sender, to, subject, msgHtml, msgPlain)
         message1 = CreateMessageHtml(to, subject, msgHtml, msgPlain)
     result = SendMessageInternal(service, "me", message1)
     return result
@@ -57,7 +33,6 @@ def SendMessageInternal(service, user_id, message):
         return "Error"
     return "OK"
 
-#def CreateMessageHtml(sender, to, subject, msgHtml, msgPlain):
 def CreateMessageHtml(to, subject, msgHtml, msgPlain):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
@@ -69,7 +44,6 @@ def CreateMessageHtml(to, subject, msgHtml, msgPlain):
 
 def createMessageWithAttachment(
     to, subject, msgHtml, msgPlain, attachmentFiles):
-#    sender, to, subject, msgHtml, msgPlain, attachmentFiles):
     """Create a message for an email.
 
     Args:
@@ -85,7 +59,6 @@ def createMessageWithAttachment(
     """
     message = MIMEMultipart('mixed')
     message['to'] = to
-    #message['from'] = sender
     message['subject'] = subject
 
     messageA = MIMEMultipart('alternative')
@@ -126,5 +99,3 @@ def createMessageWithAttachment(
         msg.add_header('Content-Disposition', 'attachment', filename=filename)
         message.attach(msg)
     return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode()}
-#    return {'raw': base64.urlsafe_b64encode(message.as_bytes().decode('utf8'))}
-#    return {'raw': message}
