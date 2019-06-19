@@ -1,0 +1,271 @@
+from __future__ import print_function
+import pickle
+import os.path
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+import qrcode
+import subprocess
+import PyPDF2
+import re
+import smtplib
+from os.path import basename
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import COMMASPACE, formatdate
+from email.mime.base import MIMEBase
+from email import encoders
+import sendemail
+
+# If modifying these scopes, delete the file token.pickle.
+SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.send"
+
+# The ID and range of a sample spreadsheet.
+# SAMPLE_SPREADSHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'
+# SAMPLE_SPREADSHEET_ID = '1VzMaGzQWcD66zX5gA4wWXOqE-Nbfx0oz_mIvbbAe_cc'
+SAMPLE_SPREADSHEET_ID = '14Ey6KMIbf3rl_HUxho7PNRzB5r1RpV6g4H_rj6_Kst8'
+# SAMPLE_RANGE_NAME = 'Class Data!A2:F'
+# SAMPLE_RANGE_NAME = 'insc!A1:Z'
+SAMPLE_RANGE_NAME = 'Respuestas de formulario 1!A1:Z'
+
+# Columns for reference
+columns = ["Marca temporal", "Dirección de correo electrónico", "Apellido", "Nombre/s", "DNI", "Pais de Residencia", "Provincia de residencia", "Estado Laboral", "Estado Académico", "Institucion / Empresa", "Area de Trabajo / Investigacion", "Deseo inscribirme a (día 1):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 2):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 3):", "Cierre SASE 2019: Viernes 19/07, 15:30 - 17:30", "Para finalizar, reingrese su correo electrónico", "Cuando haya revisado la validez de su selección, marque la siguiente casilla"]
+
+def generate_qrs(ppl):
+    qr = qrcode.QRCode(version=3, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=14, border=4)
+
+    for uid, values in ppl.items():
+        print(values)
+        filename = 'badge/qrs/'+uid+'.png'
+        qr.add_data(uid)
+        qr.make(fit=True)
+        img = qr.make_image()
+        with open(filename, 'wb') as f:
+            img.save(f)
+
+def generate_badges(ppl):
+    with open("badge/badge.tex", "rt") as fin:
+        content = fin.read()
+
+        for uid, values in ppl.items():
+            patterns = { 
+                    'ReplaceWithName'     : values['Nombre/s']+' '+values['Apellido'],
+                    'ReplaceWithUni'      : values['Institucion / Empresa'],
+                    'ReplaceWithCondition': get_profession(values['Estado Laboral']),
+                    'QRPath'              : 'qrs/'+uid+'.png',
+                   }
+
+            with open("badge/out.tex", "w") as fout:
+                newcontent = content
+                for i,j in patterns.items():
+                    newcontent = newcontent.replace(i,j)
+                fout.write(newcontent)
+            cmd = 'pdflatex -output-directory badges out.tex'
+            cmd2 = 'cp badges/out.pdf badges/{}.pdf'.format(uid)
+            cmd3 = 'rm badges/out.*'
+            print (cmd.split())
+            result = subprocess.run(cmd.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result2 = subprocess.run(cmd2.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result3 = subprocess.run(cmd3, shell=True, check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0 and result2.returncode == 0 and result3.returncode == 0:
+                print ("Badge Created for: ", uid)
+                ppl[uid]['badge']='badge/badges/'+uid+'.pdf'
+            elif result.stderr or result2.stderr or result3.stderr:
+                    Style.error('Badge creation failed: ')
+                    print(result.stderr, result2.stderr, result3.stderr)
+
+def crop_badges(ppl):
+    for uid, values in ppl.items():
+        cmd = 'pdftocairo -svg badges/{}.pdf badges/{}.svg'.format(uid,uid)
+        cmd2 = 'inkscape -z -D -f badges/{}.svg -A badges/{}-mobile.pdf'.format(uid,uid)
+        result = subprocess.run(cmd.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result2 = subprocess.run(cmd2.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode == 0 and result2.returncode == 0:
+            print ("Badge Cropped for: ", uid)
+            ppl[uid]['badge-cropped']='badge/badges/'+uid+'-mobile.pdf'
+        elif result.stderr or result2.stderr:
+                 Style.error('Badge cropping failed: ')
+                 print(result.stderr, result2.stderr)
+
+def get_profession(csvstring):
+    if re.match("Estudiante", csvstring):
+        return "Estudiante"
+    elif re.match("Profesor", csvstring):
+        return "Profesor"
+    elif re.match("Profesional", csvstring):
+        return "Profesional"
+    else:
+        return ""
+
+def get_formatted_ppl(keys, values):
+    ppl = {}
+    for row in values:
+        person = {}
+        print (len(keys))
+        for idx in range(0, len(keys)):
+           print(idx)
+           try:
+               if re.match("Deseo inscrbirme a", keys[idx]) != None:
+                   person[keys[idx]] = re.split(",[ ]*(?=Workshop|Tutorial)", row[idx]) # Find ", {Workshop,Tutorial}" string, return a list.
+               else:
+                   person[keys[idx]] = row[idx]
+           except IndexError:
+               person[keys[idx]] = "__place_holder__"
+        ppl[row[4]] = person
+
+    return ppl
+
+'''
+Día 1:
+Bloque A, excluye a: B, C, D, E
+Bloque B, excluye a: A, D, F
+Bloque C, excluye a: A
+Bloque D, excluye a: A, B
+Bloque E, excluye a: A, B
+'''
+dia1 = {}
+dia1["A"] = ['A', 'B', 'C', 'D', 'E']
+dia1["B"] = ['A', 'B', 'D', 'F']
+dia1["C"] = ['A', 'C']
+dia1["D"] = ['A', 'B', 'D']
+dia1["E"] = ['A', 'B', 'E']
+'''
+Día 2:
+Bloque A, excluye a: B, C, D, E, F, G, H
+Bloque B, excluye a: A, E, F
+Bloque C, excluye a: A, G
+Bloque D, excluye a: A, H
+Bloque E, excluye a: A, B
+Bloque F, excluye a: A, B
+Bloque G, excluye a: A, C
+Bloque H, excluye a: A, D
+'''
+dia2 = {}
+dia2["A"] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+dia2["B"] = ['A', 'B', 'E', 'F']
+dia2["C"] = ['A', 'C', 'G']
+dia2["D"] = ['A', 'D', 'H']
+dia2["E"] = ['A', 'B', 'E']
+dia2["F"] = ['A', 'B', 'F']
+dia2["G"] = ['A', 'C', 'G']
+dia2["H"] = ['A', 'D', 'H']
+'''
+Día 3:
+Bloque A, excluye a: B, C, D, E, F
+Bloque B, excluye a: A, D, E
+Bloque C, excluye a: A, F
+Bloque D, excluye a: A, B
+Bloque E, excluye a: A, B
+Bloque F, excluye a: A, C
+'''
+dia3 = {}
+dia3["A"] = ['A', 'B', 'C', 'D', 'E', 'F']
+dia3["B"] = ['A', 'B', 'D', 'E']
+dia3["C"] = ['A', 'C', 'F']
+dia3["D"] = ['A', 'B', 'D']
+dia3["E"] = ['A', 'B', 'E']
+dia3["F"] = ['A', 'C', 'F']
+
+def __check_conflicts(blocks, dia, ppl, uid, n):
+    for c, block in enumerate(blocks):
+        rest = [x for i,x in enumerate(blocks) if i!=c]
+        for element in dia[block]:
+            if element in rest:
+                if "conflicts" in ppl[uid]:
+                    ppl[uid]["conflicts"].append("Dia "+str(n)+": "+block+"->"+element)
+                else:
+                    ppl[uid]["conflicts"] = ["Dia "+str(n)+": "+block+"->"+element]
+        blocks.pop(c) #Remove block from list to avoid double notification
+
+def check_conflicts(ppl):
+    for uid, values in ppl.items():
+        blocksdia1 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 1):"])
+        blocksdia2 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 2):"])
+        blocksdia3 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 3):"])
+        __check_conflicts(blocksdia1, dia1, ppl, uid, 1)
+        __check_conflicts(blocksdia2, dia2, ppl, uid, 2)
+        __check_conflicts(blocksdia3, dia3, ppl, uid, 3)
+        
+        if "conflicts" in ppl[uid]:
+            print (ppl[uid]["Nombre/s"], "tiene conflictos con tutoriales/workshops de estos bloques:")
+            print (ppl[uid]["conflicts"])
+
+def has_conflict(person):
+    if "conflicts" in person:
+        return True
+    else:
+        return False
+
+def main():
+    """Shows basic usage of the Sheets API.
+    Prints values from a sample spreadsheet.
+    """
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials-sase.json', SCOPES)
+            creds = flow.run_local_server()
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    service = build('sheets', 'v4', credentials=creds)
+
+    # Call the Sheets API
+    sheet = service.spreadsheets()
+    result = sheet.values().get(spreadsheetId=SAMPLE_SPREADSHEET_ID,
+                                range=SAMPLE_RANGE_NAME).execute()
+    values = result.get('values', [])
+
+    keys = values[0]
+    print ("KEYS: ", keys)
+    del values[0]
+
+# Make a function for formatting - Dict of lists
+# Errors in forthcoming functions will be appended to ppl['Errors'].append('Error String'). Generate output log
+    ppl = get_formatted_ppl(keys, values)
+
+# Check that there's no conflicts in tutorials and/or workshops
+    check_conflicts(ppl)
+ 
+    print (ppl["36538926"])
+
+# Generate QRs
+#    generate_qrs(ppl)
+
+# Generate Badges
+#    generate_badges(ppl)
+    
+#    print (ppl["36538926"])
+
+# Crop badges 16:9 for phone
+#    crop_badges(ppl)
+
+
+# TODO Make compose_email function, discriminating by conflicts and stuff.
+# Send emails.
+#    to = ppl['36538926']['Dirección de correo electrónico']
+'''    to = "hernangonzalez.234@gmail.com"
+    subject = 'Inscripción SASE 2019 - Gafete'
+    fls = [ppl['36538926']['badge'], ppl['36538926']['badge-cropped']]
+    msgPlain = "Hola Plain wachi {},\nQué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
+    msgHtml = "Hola Html wachi {},<br/>Qué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
+
+#    result = sendemail.SendMessage(sender, to, subject, msgHtml, msgPlain, creds, fls)
+    result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)
+    print ("Email sent: ",result)
+'''
+
+if __name__ == '__main__':
+    main()

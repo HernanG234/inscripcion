@@ -1,0 +1,49 @@
+%%%%
+%
+% ticket.sty example file for a pin for conferences
+%
+%%%%
+% use the corresponding paper size for your ticket definition
+\documentclass[a4paper,20pt]{letter}
+
+% load ticket.sty with the appropriate ticket definition
+\usepackage[freepin,boxed]{ticket}
+
+% load misc stuff
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[utf8]{inputenc}
+\unitlength=1mm
+\ticketSize{105}{80}
+
+\renewcommand{\ttdefault}{pcr}
+\renewcommand{\familydefault}{\ttdefault}
+% make your default ticket. \ticketdefault is somewhat like a background
+\renewcommand{\ticketdefault}{%
+  \put( 3,  62){\includegraphics[width=99mm]{logostodos.pdf}}
+  \put( 23,  55){\includegraphics[width=50mm]{saseletras.pdf}}
+%  \put(40,  3){\includegraphics[width=30mm]{logo_fceia.png}}
+%  \put( 2, 13){\line(1,0){65}}
+%  \put( 7, 10){\scriptsize Facultad de Ciencias Exactas, Ingeniería y Agrimensura}
+%  \put( 7,  60){\includegraphics[width=40mm]{logosase2019.pdf}}
+%  \put( 7,  7){\scriptsize Universidad Nacional de Rosario}
+%  \put( 7,  4){\scriptsize 2019}
+%  \put( 0, 0){\textcolor{cyan}{\line(1,0){67.5}}}
+  \put( 0, 0){\textcolor{cyan}{\rule{105mm}{4pt}}}
+}
+
+% now what do you like to put in your ticket
+\newcommand{\confpin}[4]{\ticket{%
+    \put(53,50){\makebox[0mm]{\textbf{\Large #1}}}
+    \put(53,44){\makebox[0mm]{\textbf{\large #2}}}%
+    \put(53,40){\makebox[0mm]{\textbf{\large #3}}}%
+    \put(53,2){\makebox[0mm]{\includegraphics[width=0.32\textwidth]{#4}}}%
+}}
+
+
+%% the pins for the partipiciants ... ;-)
+%% you can generate this part from a database!
+\begin{document}
+\confpin{José Ignacio Sosa}{FCEIA - UNR}{Profesor}{qrs/12121212.png}%{QRPath}
+%\confpin{ReplaceWithName}{ReplaceWithUni}{ReplaceWithCondition}{QRPath}
+\end{document}
