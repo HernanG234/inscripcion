@@ -17,6 +17,7 @@ from email.utils import COMMASPACE, formatdate
 from email.mime.base import MIMEBase
 from email import encoders
 import sendemail
+import itertools
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.send"
@@ -178,8 +179,11 @@ def __check_conflicts(blocks, dia, ppl, uid, n):
                     ppl[uid]["conflicts"] = ["Dia "+str(n)+": "+block+"->"+element]
         blocks.pop(c) #Remove block from list to avoid double notification
 
-def check_conflicts(ppl):
-    for uid, values in ppl.items():
+def check_conflicts(ppl, start=0):
+    max_limit = 400
+    if start+400 > len(ppl):
+       max_limit = len(ppl)-start-1
+    for uid, values in itertools.islice(sorted(ppl.items(), key=ppl.get("Marca temporal")), start, start+max_limit):
         blocksdia1 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 1):"])
         blocksdia2 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 2):"])
         blocksdia3 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 3):"])
@@ -190,6 +194,7 @@ def check_conflicts(ppl):
         if "conflicts" in ppl[uid]:
             print (ppl[uid]["Nombre/s"], "tiene conflictos con tutoriales/workshops de estos bloques:")
             print (ppl[uid]["conflicts"])
+    return max_limit
 
 def has_conflict(person):
     if "conflicts" in person:
@@ -229,17 +234,12 @@ def main():
     values = result.get('values', [])
 
     keys = values[0]
-    print ("KEYS: ", keys)
+#    print ("KEYS: ", keys)
     del values[0]
 
 # Make a function for formatting - Dict of lists
 # Errors in forthcoming functions will be appended to ppl['Errors'].append('Error String'). Generate output log
     ppl = get_formatted_ppl(keys, values)
-
-# Check that there's no conflicts in tutorials and/or workshops
-    check_conflicts(ppl)
- 
-    print (ppl["36538926"])
 
 # Generate QRs
     generate_qrs(ppl)
@@ -252,6 +252,28 @@ def main():
 # Crop badges 16:9 for phone
     crop_badges(ppl)
 
+    input("Gonna check conflicts. Press Enter to continue...")
+
+    start = 0
+    try:
+        with open('index.txt', 'rb') as lastindex:
+            if lastindex.empty():
+                start = 0
+            else:
+                start = lastindex.read() + 1
+    except:
+        start = 0
+
+# Check that there's no conflicts in tutorials and/or workshops
+    count = check_conflicts(ppl, start)
+
+    start = start + count
+    print(start)
+    try:
+        with open('index.txt', 'w') as lastindex:
+            lastindex.write(str(start))
+    except:
+        print("Couldn't write last index")
 
 # TODO Make compose_email function, discriminating by conflicts and stuff.
 # Send emails.
