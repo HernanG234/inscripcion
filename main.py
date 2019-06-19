@@ -30,7 +30,7 @@ SAMPLE_SPREADSHEET_ID = '14Ey6KMIbf3rl_HUxho7PNRzB5r1RpV6g4H_rj6_Kst8'
 SAMPLE_RANGE_NAME = 'Respuestas de formulario 1!A1:Z'
 
 # Columns for reference
-columns = ["Marca temporal", "Dirección de correo electrónico", "Apellido", "Nombre/s", "DNI", "Pais de Residencia", "Provincia de residencia", "Estado Laboral", "Estado Académico", "Institucion / Empresa", "Area de Trabajo / Investigacion", "Deseo inscribirme a (día 1):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 2):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 3):", "Cierre SASE 2019: Viernes 19/07, 15:30 - 17:30", "Para finalizar, reingrese su correo electrónico", "Cuando haya revisado la validez de su selección, marque la siguiente casilla"]
+columns = ["Marca temporal", "Dirección de correo electrónico", "Apellido", "Nombre/s", "DNI", "Pais de Residencia", "Provincia de residencia", "Estado Laboral", "Estado Académico", "Institucion / Empresa", "Area de Trabajo / Investigacion", "Deseo inscribirme a (día 1):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 2):", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "Deseo inscribirme a (día 3):", "Cierre SASE 2019: Viernes 19/07, 15:30 - 17:30", "Para finalizar, reingrese su correo electrónico", "Cuando haya revisado la validez de su selección, marque la siguiente casilla", "¿Desea asistir al CASE?"]
 
 def generate_qrs(ppl):
     qr = qrcode.QRCode(version=3, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=14, border=4)
@@ -45,7 +45,7 @@ def generate_qrs(ppl):
             img.save(f)
 
 def generate_badges(ppl):
-    with open("badge/badge.tex", "rt") as fin:
+    with open("badge/badge-mobile.tex", "rt") as fin:
         content = fin.read()
 
         for uid, values in ppl.items():
@@ -242,15 +242,15 @@ def main():
     print (ppl["36538926"])
 
 # Generate QRs
-#    generate_qrs(ppl)
+    generate_qrs(ppl)
 
 # Generate Badges
-#    generate_badges(ppl)
+    generate_badges(ppl)
     
-#    print (ppl["36538926"])
+    print (ppl["36538926"])
 
 # Crop badges 16:9 for phone
-#    crop_badges(ppl)
+    crop_badges(ppl)
 
 
 # TODO Make compose_email function, discriminating by conflicts and stuff.
