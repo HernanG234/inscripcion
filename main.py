@@ -65,9 +65,9 @@ def generate_badges(ppl):
             cmd2 = 'cp badges/out.pdf badges/{}.pdf'.format(uid)
             cmd3 = 'rm badges/out.*'
             print (cmd.split())
-            result = subprocess.run(cmd.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            result2 = subprocess.run(cmd2.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            result3 = subprocess.run(cmd3, shell=True, check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result2 = subprocess.run(cmd2.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result3 = subprocess.run(cmd3, shell=True, check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0 and result2.returncode == 0 and result3.returncode == 0:
                 print ("Badge Created for: ", uid)
                 ppl[uid]['badge']='badge/badges/'+uid+'.pdf'
@@ -79,8 +79,8 @@ def crop_badges(ppl):
     for uid, values in ppl.items():
         cmd = 'pdftocairo -svg badges/{}.pdf badges/{}.svg'.format(uid,uid)
         cmd2 = 'inkscape -z -D -f badges/{}.svg -A badges/{}-mobile.pdf'.format(uid,uid)
-        result = subprocess.run(cmd.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        result2 = subprocess.run(cmd2.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result2 = subprocess.run(cmd2.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode == 0 and result2.returncode == 0:
             print ("Badge Cropped for: ", uid)
             ppl[uid]['badge-cropped']='badge/badges/'+uid+'-mobile.pdf'
