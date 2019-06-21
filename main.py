@@ -18,6 +18,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import sendemail
 import itertools
+import csv
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.send"
@@ -241,32 +242,43 @@ def get_confirmation_body(person):
 
     return msgPlain, msgHtml
 
-def compose_mail(ppl, start=0):
+def compose_mail(ppl):
+    with open('sentemails.csv', 'r') as f:
+        reader = csv.reader(f)
+        sentmaillist = list(reader)
+    print(sentmaillist)
     max_limit = 400
-    if start == len(ppl):
-        print("Every email has already been sent")
-        return 0
+    counter = 0
+    if not sentmaillist:
+        sentmaillist.append("0") 
+    else:
+        sentmaillist = sentmaillist[0]
+ 
+    for uid, values in ppl.items():
+        if counter < max_limit:
+            if uid not in sentmaillist:
+                to = values["Dirección de correo electrónico"]
+                subject = 'Inscripción SASE 2019 - Gafete'
+                fls = [values['badge'], values['badge-m-cropped']]
 
-    if start+400 > len(ppl):
-       max_limit = len(ppl)-start-1
-    for uid, values in itertools.islice(sorted(ppl.items()), start, start+max_limit):
-        to = values["Dirección de correo electrónico"]
-        subject = 'Inscripción SASE 2019 - Gafete'
-        fls = [values['badge'], values['badge-m-cropped']]
+                if has_conflicts(ppl[uid]):
+                    msgPlain, msgHtml = get_conflict_body(ppl[uid])
+                else:
+                    msgPlain, msgHtml = get_confirmation_body(ppl[uid])
 
-        if has_conflicts(ppl[uid]):
-            msgPlain, msgHtml = get_conflict_body(ppl[uid])
-        else:
-            msgPlain, msgHtml = get_confirmation_body(ppl[uid])
-
-        print(msgPlain)
-        print(msgHtml)
+#                print(msgPlain)
+#                print(msgHtml)
 
 # DESCOMENTAR ACÁ PARA MANDAR LOS MAILS!
-#        result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)    
-#        print ("Email sent: ",result)
+#                result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)    
+#                print ("Email sent: ",result)
+                sentmaillist.append(uid)
+                counter = counter + 1
+                print(counter)
 
-    return max_limit
+    with open("sentemails.csv", 'w', newline='') as myfile:
+        wr = csv.writer(myfile)
+        wr.writerow(sentmaillist)
 
 def main():
     """Shows basic usage of the Sheets API.
@@ -308,15 +320,15 @@ def main():
     ppl = get_formatted_ppl(keys, values)
 
 # Generate QRs
-#    generate_qrs(ppl)
+    generate_qrs(ppl)
 
 # Generate Badges
-#    generate_badges(ppl)
+    generate_badges(ppl)
     
 #    print (ppl["36538926"])
 
 # Crop badges 16:9 for phone
-#    crop_badges(ppl)
+    crop_badges(ppl)
 
     print(len(ppl))
     input("Gonna check conflicts. Press Enter to continue...")
@@ -339,30 +351,8 @@ def main():
 #    result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)
 #    print ("Email sent: ",result)
 
-    try:
-        with open('index.txt', 'r+') as lastindex:
-            if os.stat("index.txt").st_size == 0:
-                start = 0
-            else:
-                content = int(lastindex.read())
-                if content == 0:
-                    start = 0
-                else:
-                    start = content + 1
-    except:
-        start = 0
-
-    print(start)
     input("Gonna send emails. Press Enter to continue...")
-    count = compose_mail(ppl, start)
-    start = start + count
-    print(start)
-    try:
-        with open('index.txt', 'w') as lastindex:
-            lastindex.write(str(start))
-    except:
-        print("Couldn't write last index")
-
-
+    count = compose_mail(ppl)
+    
 if __name__ == '__main__':
     main()
