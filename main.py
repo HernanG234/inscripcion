@@ -63,6 +63,36 @@ def generate_badges(ppl):
                     newcontent = newcontent.replace(i,j)
                 fout.write(newcontent)
             cmd = 'pdflatex -output-directory badges out.tex'
+            cmd2 = 'cp badges/out.pdf badges/{}-m.pdf'.format(uid)
+            cmd3 = 'rm badges/out.*'
+            print (cmd.split())
+            result = subprocess.run(cmd.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result2 = subprocess.run(cmd2.split(), check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result3 = subprocess.run(cmd3, shell=True, check=True, text=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0 and result2.returncode == 0 and result3.returncode == 0:
+                print ("Badge Created for: ", uid)
+                ppl[uid]['badge-m']='badge/badges/'+uid+'-m.pdf'
+            elif result.stderr or result2.stderr or result3.stderr:
+                    Style.error('Badge creation failed: ')
+                    print(result.stderr, result2.stderr, result3.stderr)
+
+    with open("badge/badge.tex", "rt") as fin:
+        content = fin.read()
+
+        for uid, values in ppl.items():
+            patterns = { 
+                    'ReplaceWithName'     : values['Nombre/s']+' '+values['Apellido'],
+                    'ReplaceWithUni'      : values['Institucion / Empresa'],
+                    'ReplaceWithCondition': get_profession(values['Estado Laboral']),
+                    'QRPath'              : 'qrs/'+uid+'.png',
+                   }
+
+            with open("badge/out.tex", "w") as fout:
+                newcontent = content
+                for i,j in patterns.items():
+                    newcontent = newcontent.replace(i,j)
+                fout.write(newcontent)
+            cmd = 'pdflatex -output-directory badges out.tex'
             cmd2 = 'cp badges/out.pdf badges/{}.pdf'.format(uid)
             cmd3 = 'rm badges/out.*'
             print (cmd.split())
@@ -76,15 +106,16 @@ def generate_badges(ppl):
                     Style.error('Badge creation failed: ')
                     print(result.stderr, result2.stderr, result3.stderr)
 
+
 def crop_badges(ppl):
     for uid, values in ppl.items():
-        cmd = 'pdftocairo -svg badges/{}.pdf badges/{}.svg'.format(uid,uid)
-        cmd2 = 'inkscape -z -D -f badges/{}.svg -A badges/{}-mobile.pdf'.format(uid,uid)
+        cmd = 'pdftocairo -svg badges/{}-m.pdf badges/{}-m.svg'.format(uid,uid)
+        cmd2 = 'inkscape -z -D -f badges/{}-m.svg -A badges/{}-m-cropped.pdf'.format(uid,uid)
         result = subprocess.run(cmd.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result2 = subprocess.run(cmd2.split(), check=True, universal_newlines=True, cwd='badge')#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode == 0 and result2.returncode == 0:
             print ("Badge Cropped for: ", uid)
-            ppl[uid]['badge-cropped']='badge/badges/'+uid+'-mobile.pdf'
+            ppl[uid]['badge-m-cropped']='badge/badges/'+uid+'-m-cropped.pdf'
         elif result.stderr or result2.stderr:
                  Style.error('Badge cropping failed: ')
                  print(result.stderr, result2.stderr)
@@ -179,11 +210,8 @@ def __check_conflicts(blocks, dia, ppl, uid, n):
                     ppl[uid]["conflicts"] = ["Dia "+str(n)+": "+block+"->"+element]
         blocks.pop(c) #Remove block from list to avoid double notification
 
-def check_conflicts(ppl, start=0):
-    max_limit = 400
-    if start+400 > len(ppl):
-       max_limit = len(ppl)-start-1
-    for uid, values in itertools.islice(sorted(ppl.items(), key=ppl.get("Marca temporal")), start, start+max_limit):
+def check_conflicts(ppl):
+    for uid, values in ppl.items():
         blocksdia1 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 1):"])
         blocksdia2 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 2):"])
         blocksdia3 = re.findall(".(?<!\<)(?=\>)", values["Deseo inscribirme a (día 3):"])
@@ -194,13 +222,51 @@ def check_conflicts(ppl, start=0):
         if "conflicts" in ppl[uid]:
             print (ppl[uid]["Nombre/s"], "tiene conflictos con tutoriales/workshops de estos bloques:")
             print (ppl[uid]["conflicts"])
-    return max_limit
 
-def has_conflict(person):
+def has_conflicts(person):
     if "conflicts" in person:
         return True
     else:
         return False
+
+def get_conflict_body(person):
+    msgPlain = "Hola Plain wachi {},\nQué onda vo? Tomá tu dni {}\nTenés conflictos por acá:\n{}".format(person['Nombre/s'], person['DNI'], person['conflicts'])
+    msgHtml = "Hola Html wachi {},<br/>Qué onda vo? Tomá tu dni {}<br/>Tenés conflictos por acá:<br/>{}".format(person['Nombre/s'], person['DNI'], person['conflicts'])
+
+    return msgPlain, msgHtml
+
+def get_confirmation_body(person):
+    msgPlain = "Hola Plain wachi {},\nQué onda vo? Tomá tu dni {}\nTodo bien por acá\n".format(person['Nombre/s'], person['DNI'])
+    msgHtml = "Hola Html wachi {},<br/>Qué onda vo? Tomá tu dni {}<br/>Todo bien por acá:<br/>".format(person['Nombre/s'], person['DNI'])
+
+    return msgPlain, msgHtml
+
+def compose_mail(ppl, start=0):
+    max_limit = 400
+    if start == len(ppl):
+        print("Every email has already been sent")
+        return 0
+
+    if start+400 > len(ppl):
+       max_limit = len(ppl)-start-1
+    for uid, values in itertools.islice(sorted(ppl.items()), start, start+max_limit):
+        to = values["Dirección de correo electrónico"]
+        subject = 'Inscripción SASE 2019 - Gafete'
+        fls = [values['badge'], values['badge-m-cropped']]
+
+        if has_conflicts(ppl[uid]):
+            msgPlain, msgHtml = get_conflict_body(ppl[uid])
+        else:
+            msgPlain, msgHtml = get_confirmation_body(ppl[uid])
+
+        print(msgPlain)
+        print(msgHtml)
+
+# DESCOMENTAR ACÁ PARA MANDAR LOS MAILS!
+#        result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)    
+#        print ("Email sent: ",result)
+
+    return max_limit
 
 def main():
     """Shows basic usage of the Sheets API.
@@ -242,31 +308,53 @@ def main():
     ppl = get_formatted_ppl(keys, values)
 
 # Generate QRs
-    generate_qrs(ppl)
+#    generate_qrs(ppl)
 
 # Generate Badges
-    generate_badges(ppl)
+#    generate_badges(ppl)
     
-    print (ppl["36538926"])
+#    print (ppl["36538926"])
 
 # Crop badges 16:9 for phone
-    crop_badges(ppl)
+#    crop_badges(ppl)
 
+    print(len(ppl))
     input("Gonna check conflicts. Press Enter to continue...")
 
-    start = 0
+
+
+# Check that there's no conflicts in tutorials and/or workshops
+    count = check_conflicts(ppl)
+
+# Send emails.
+# Dummy email, uncomment for testing
+#    to = ppl['36538926']['Dirección de correo electrónico']
+
+#    to = "hernangonzalez.234@gmail.com"
+#    subject = 'Inscripción SASE 2019 - Gafete'
+#    fls = [ppl['36538926']['badge'], ppl['36538926']['badge-m-cropped']]
+#    msgPlain = "Hola Plain wachi {},\nQué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
+#    msgHtml = "Hola Html wachi {},<br/>Qué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
+
+#    result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)
+#    print ("Email sent: ",result)
+
     try:
-        with open('index.txt', 'rb') as lastindex:
-            if lastindex.empty():
+        with open('index.txt', 'r+') as lastindex:
+            if os.stat("index.txt").st_size == 0:
                 start = 0
             else:
-                start = lastindex.read() + 1
+                content = int(lastindex.read())
+                if content == 0:
+                    start = 0
+                else:
+                    start = content + 1
     except:
         start = 0
 
-# Check that there's no conflicts in tutorials and/or workshops
-    count = check_conflicts(ppl, start)
-
+    print(start)
+    input("Gonna send emails. Press Enter to continue...")
+    count = compose_mail(ppl, start)
     start = start + count
     print(start)
     try:
@@ -275,19 +363,6 @@ def main():
     except:
         print("Couldn't write last index")
 
-# TODO Make compose_email function, discriminating by conflicts and stuff.
-# Send emails.
-#    to = ppl['36538926']['Dirección de correo electrónico']
-'''    to = "hernangonzalez.234@gmail.com"
-    subject = 'Inscripción SASE 2019 - Gafete'
-    fls = [ppl['36538926']['badge'], ppl['36538926']['badge-cropped']]
-    msgPlain = "Hola Plain wachi {},\nQué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
-    msgHtml = "Hola Html wachi {},<br/>Qué onda vo? Tomá tu dni {}".format(ppl['36538926']['Nombre/s'], ppl['36538926']['DNI'])
-
-#    result = sendemail.SendMessage(sender, to, subject, msgHtml, msgPlain, creds, fls)
-    result = sendemail.SendMessage(to, subject, msgHtml, msgPlain, creds, fls)
-    print ("Email sent: ",result)
-'''
 
 if __name__ == '__main__':
     main()
